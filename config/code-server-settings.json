@@ -1,0 +1,10 @@
+{
+  "extensions.recommendations": [
+    "anthropic.claude-code",
+    "mistralai.mistral-vibe-code"
+  ],
+  "extensions.autoUpdate": false,
+  "update.mode": "none",
+  "telemetry.telemetryLevel": "off",
+  "claudeCode.disableLoginPrompt": true
+}

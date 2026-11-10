@@ -1,0 +1,28 @@
+name: "re:Invent VS Code + Claude Bedrock + Mistral Vibe"
+slug: "vscode-reinvent-claude-bedrock-mistral-vibe"
+description: "Browser VS Code with Claude Code on Amazon Bedrock and Mistral Vibe (Codestral). Both extensions are installed in the runtime. AWS and Mistral credentials come from global environment variables."
+catalog_classification:
+  - Developer Example
+launchable: true
+lifecycle_status: Active
+industry: General
+industry_alignment: "Horizontal"
+tags:
+  - vscode
+  - code-server
+  - claude-code
+  - aws-bedrock
+  - bedrock
+  - mistral-vibe
+  - codestral
+  - reinvent
+  - cloudera-ai
+product_mapping:
+  - Cloudera Machine Learning
+  - Amazon Bedrock
+publisher: cloudera
+source: Internal
+public_github_link: "https://github.com/kevinbtalbert/AWS-ReInvent-Bedrock-Claude-and-Mistral-Vibe"
+maintainer_name: "Kevin Talbert"
+date_created: "2026-11-10"
+date_updated: "2026-11-10"
