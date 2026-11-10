@@ -9,7 +9,7 @@
 # Claude also needs BEDROCK_MODEL and AWS_REGION.
 FROM --platform=linux/amd64 docker.repository.cloudera.com/cloudera/cdsw/ml-runtime-pbj-workbench-python3.13-standard:2026.08.1-b5
 
-# Catalog version is 1.1.1. Bump ML_RUNTIME_MAINTENANCE_VERSION to iterate (1.1.2, ...).
+# Catalog version is 1.2.1. Bump ML_RUNTIME_MAINTENANCE_VERSION to iterate (1.2.2, ...).
 # That version is independent of code-server and of the Claude / Mistral extension versions.
 ARG CODE_SERVER_VERSION=4.141.0
 ARG MISTRAL_VIBE_EXTENSION_VERSION=1.27.5
@@ -64,7 +64,16 @@ RUN chmod +x /usr/local/bin/vscode \
         '[ -f /etc/profile.d/zz-claude-bedrock.sh ] && . /etc/profile.d/zz-claude-bedrock.sh' \
         >> /home/cdsw/.bashrc; \
     fi && \
-    chown -R cdsw:cdsw /home/cdsw
+    chown -R cdsw:cdsw /home/cdsw && \
+    mkdir -p /opt/code-server/extensions /opt/code-server/user-data/User && \
+    chown -R cdsw:cdsw /opt/code-server && \
+    if ! grep -q 'reinvent-runtime-shell' /etc/bash.bashrc 2>/dev/null; then \
+      printf '%s\n' \
+        '# reinvent-runtime-shell' \
+        '[ -f /etc/profile.d/mistral-vibe.sh ] && . /etc/profile.d/mistral-vibe.sh' \
+        '[ -f /etc/profile.d/zz-claude-bedrock.sh ] && . /etc/profile.d/zz-claude-bedrock.sh' \
+        >> /etc/bash.bashrc; \
+    fi
 
 # ── Node.js 22 (Claude Code's npm package asks for >= 22; the claude binary does not use it at runtime) ─
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
@@ -91,10 +100,12 @@ ENV PATH="/usr/local/bin:${PATH}" \
     BEDROCK_HOME="/home/cdsw/.claude/bedrock" \
     BEDROCK_VENV_BIN="/opt/bedrock-claude/venv/bin" \
     BEDROCK_LITELLM_PORT="4000" \
+    CODE_SERVER_EXTENSIONS_DIR="/opt/code-server/extensions" \
+    CODE_SERVER_USER_DATA_DIR="/opt/code-server/user-data" \
     BEDROCK_MAX_OUTPUT_TOKENS="8192" \
     BEDROCK_MAX_INPUT_TOKENS="192000"
 
-ARG ML_RUNTIME_SHORT_VERSION=1.1
+ARG ML_RUNTIME_SHORT_VERSION=1.2
 ARG ML_RUNTIME_MAINTENANCE_VERSION=1
 
 ENV ML_RUNTIME_EDITION="re:Invent VS Code + Claude Bedrock + Mistral Vibe" \
@@ -127,4 +138,4 @@ ARG CLAUDE_CODE_EXTENSION_VERSION=2.1.322
 RUN /usr/local/bin/install-vscode-extension anthropic.claude-code "${CLAUDE_CODE_EXTENSION_VERSION}" \
     && /usr/local/bin/install-vscode-extension mistralai.mistral-vibe-code "${MISTRAL_VIBE_EXTENSION_VERSION}"
 
-COPY --chown=cdsw:cdsw config/code-server-settings.json /home/cdsw/.local/share/code-server/User/settings.json
+COPY --chown=cdsw:cdsw config/code-server-settings.json /opt/code-server/user-data/User/settings.json

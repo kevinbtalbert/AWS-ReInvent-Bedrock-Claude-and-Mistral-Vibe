@@ -28,6 +28,9 @@ BEDROCK_MAX_INPUT_TOKENS="${BEDROCK_MAX_INPUT_TOKENS:-192000}"
 CLAUDE_OPUS_ALIAS="${BEDROCK_CLAUDE_OPUS_ALIAS:-claude-opus-4-6}"
 CLAUDE_SONNET_ALIAS="${BEDROCK_CLAUDE_SONNET_ALIAS:-claude-sonnet-4-6}"
 CLAUDE_HAIKU_ALIAS="${BEDROCK_CLAUDE_HAIKU_ALIAS:-claude-haiku-4-5-20251001}"
+CLAUDE_FABLE_ALIAS="${BEDROCK_CLAUDE_FABLE_ALIAS:-claude-fable-5}"
+# Fable uses the same Bedrock model as the rest of the session unless this is set.
+BEDROCK_FABLE_MODEL="${BEDROCK_FABLE_MODEL:-${BEDROCK_MODEL:-}}"
 
 bedrock_log() { printf '%s\n' "$*" >&2; }
 bedrock_die() { bedrock_log "ERROR: $*"; return 1; }
@@ -61,51 +64,44 @@ bedrock_litellm_bin() {
 }
 
 bedrock_write_litellm_config() {
-    local litellm_model region max_out max_in
-    litellm_model="$(bedrock_litellm_model_id)"
+    local region max_out max_in main_model fable_model
     region="$(bedrock_aws_region)"
     max_out="${BEDROCK_MAX_OUTPUT_TOKENS:-8192}"
     max_in="${BEDROCK_MAX_INPUT_TOKENS:-192000}"
+    main_model="$(bedrock_litellm_model_id "${BEDROCK_MODEL}")"
+    fable_model="$(bedrock_litellm_model_id "${BEDROCK_FABLE_MODEL:-${BEDROCK_MODEL}}")"
 
     mkdir -p "$(dirname "$LITELLM_CONFIG")"
-
     cat >"$LITELLM_CONFIG" <<YAML
 # Generated at session start. Signs with the long-lived IAM access key pair.
 model_list:
-  - model_name: ${CLAUDE_OPUS_ALIAS}
-    litellm_params:
-      model: ${litellm_model}
-      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
-      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
-      aws_region_name: ${region}
-      max_tokens: ${max_out}
-    model_info:
-      max_tokens: 200000
-      max_input_tokens: ${max_in}
-      max_output_tokens: ${max_out}
-  - model_name: ${CLAUDE_SONNET_ALIAS}
-    litellm_params:
-      model: ${litellm_model}
-      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
-      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
-      aws_region_name: ${region}
-      max_tokens: ${max_out}
-    model_info:
-      max_tokens: 200000
-      max_input_tokens: ${max_in}
-      max_output_tokens: ${max_out}
-  - model_name: ${CLAUDE_HAIKU_ALIAS}
-    litellm_params:
-      model: ${litellm_model}
-      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
-      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
-      aws_region_name: ${region}
-      max_tokens: ${max_out}
-    model_info:
-      max_tokens: 200000
-      max_input_tokens: ${max_in}
-      max_output_tokens: ${max_out}
+YAML
 
+    bedrock_append_litellm_model() {
+        local name="$1" backend="$2"
+        cat >>"$LITELLM_CONFIG" <<YAML
+  - model_name: ${name}
+    litellm_params:
+      model: ${backend}
+      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+      aws_region_name: ${region}
+      max_tokens: ${max_out}
+    model_info:
+      max_tokens: 200000
+      max_input_tokens: ${max_in}
+      max_output_tokens: ${max_out}
+YAML
+    }
+
+    bedrock_append_litellm_model "${CLAUDE_OPUS_ALIAS}" "${main_model}"
+    bedrock_append_litellm_model "${CLAUDE_SONNET_ALIAS}" "${main_model}"
+    bedrock_append_litellm_model "${CLAUDE_HAIKU_ALIAS}" "${main_model}"
+    bedrock_append_litellm_model "${CLAUDE_FABLE_ALIAS}" "${fable_model}"
+    bedrock_append_litellm_model "claude-fable-5-2" "${fable_model}"
+    bedrock_append_litellm_model "fable" "${fable_model}"
+
+    cat >>"$LITELLM_CONFIG" <<YAML
 litellm_settings:
   master_key: ${LITELLM_MASTER_KEY}
   drop_params: true
@@ -205,14 +201,15 @@ EOF
   "model": "${CLAUDE_SONNET_ALIAS}",
   "env": {
     "ANTHROPIC_BASE_URL": "${PROXY_URL}",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${CLAUDE_SONNET_ALIAS}",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${CLAUDE_OPUS_ALIAS}",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "${CLAUDE_SONNET_ALIAS}",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${CLAUDE_HAIKU_ALIAS}",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "${CLAUDE_FABLE_ALIAS}",
     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
     "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
     "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "${BEDROCK_MAX_OUTPUT_TOKENS:-8192}",
-    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
     "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
@@ -222,23 +219,25 @@ EOF
 }
 
 bedrock_export_claude_env() {
-    unset AWS_BEARER_TOKEN_BEDROCK AWS_SESSION_TOKEN
+    unset AWS_BEARER_TOKEN_BEDROCK AWS_SESSION_TOKEN CLAUDE_CODE_ATTRIBUTION_HEADER
     export ANTHROPIC_BASE_URL="$PROXY_URL"
     export ANTHROPIC_API_KEY="$LITELLM_MASTER_KEY"
     unset ANTHROPIC_AUTH_TOKEN
-    export ANTHROPIC_DEFAULT_OPUS_MODEL="$CLAUDE_SONNET_ALIAS"
+    export ANTHROPIC_DEFAULT_OPUS_MODEL="$CLAUDE_OPUS_ALIAS"
     export ANTHROPIC_DEFAULT_SONNET_MODEL="$CLAUDE_SONNET_ALIAS"
     export ANTHROPIC_DEFAULT_HAIKU_MODEL="$CLAUDE_HAIKU_ALIAS"
+    export ANTHROPIC_DEFAULT_FABLE_MODEL="$CLAUDE_FABLE_ALIAS"
     export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="${CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:-1}"
     export CLAUDE_CODE_DISABLE_1M_CONTEXT="${CLAUDE_CODE_DISABLE_1M_CONTEXT:-1}"
     export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS="${CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS:-1}"
     export CLAUDE_CODE_MAX_OUTPUT_TOKENS="${BEDROCK_MAX_OUTPUT_TOKENS:-8192}"
+    export CLAUDE_CODE_AUTO_MODE_SERVER="${CLAUDE_CODE_AUTO_MODE_SERVER:-0}"
 }
 
 # Hash of the long-lived key pair, model, and region for this session.
 bedrock_env_fingerprint() {
     local material
-    material="${BEDROCK_MODEL}|$(bedrock_aws_region)|${AWS_ACCESS_KEY_ID:-}|${AWS_SECRET_ACCESS_KEY:-}|${LITELLM_PORT}|${BEDROCK_MAX_OUTPUT_TOKENS:-}|${BEDROCK_MAX_INPUT_TOKENS:-}"
+    material="${BEDROCK_MODEL}|${BEDROCK_FABLE_MODEL:-}|$(bedrock_aws_region)|${AWS_ACCESS_KEY_ID:-}|${AWS_SECRET_ACCESS_KEY:-}|${LITELLM_PORT}|${BEDROCK_MAX_OUTPUT_TOKENS:-}|${BEDROCK_MAX_INPUT_TOKENS:-}"
     if bedrock_have_cmd sha256sum; then
         printf '%s' "$material" | sha256sum | awk '{print $1}'
     elif bedrock_have_cmd shasum; then

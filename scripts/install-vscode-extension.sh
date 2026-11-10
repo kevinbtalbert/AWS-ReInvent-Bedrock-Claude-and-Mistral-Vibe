@@ -35,8 +35,18 @@ if [[ -z "${vsix_url}" || "${vsix_url}" == "null" ]]; then
   exit 1
 fi
 
+cs_args=()
+if [[ -n "${CODE_SERVER_EXTENSIONS_DIR:-}" ]]; then
+  mkdir -p "${CODE_SERVER_EXTENSIONS_DIR}"
+  cs_args+=(--extensions-dir "${CODE_SERVER_EXTENSIONS_DIR}")
+fi
+if [[ -n "${CODE_SERVER_USER_DATA_DIR:-}" ]]; then
+  mkdir -p "${CODE_SERVER_USER_DATA_DIR}"
+  cs_args+=(--user-data-dir "${CODE_SERVER_USER_DATA_DIR}")
+fi
+
 curl -fsSL "${vsix_url}" -o "${dest}"
-code-server --install-extension "${dest}"
+code-server "${cs_args[@]}" --install-extension "${dest}"
 rm -f "${dest}"
 
 found=0
@@ -44,10 +54,10 @@ while IFS= read -r line; do
   case "${line}" in
     "${ext_id}" | "${ext_id}@"*) found=1 ;;
   esac
-done < <(code-server --list-extensions || true)
+done < <(code-server "${cs_args[@]}" --list-extensions || true)
 if [[ "${found}" -ne 1 ]]; then
   echo "[install-vscode-extension] ERROR: ${ext_id} is not listed after install" >&2
-  code-server --list-extensions >&2 || true
+  code-server "${cs_args[@]}" --list-extensions >&2 || true
   exit 1
 fi
 echo "[install-vscode-extension] installed ${ext_id}@${version}"

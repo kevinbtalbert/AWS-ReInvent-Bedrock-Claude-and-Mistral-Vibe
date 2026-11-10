@@ -33,6 +33,7 @@ Optional:
 | --- | --- |
 | `MISTRAL_CONSOLE_URL` | Console host for hosted Cloudera Mistral stacks (`browser_auth_base_url`) |
 | `BEDROCK_LITELLM_PORT` | Local LiteLLM port (default `4000`) |
+| `BEDROCK_FABLE_MODEL` | Bedrock id for Claude Fable. Defaults to `BEDROCK_MODEL`, so Fable works with the same key pair without a second model |
 
 `MISTRAL_API_ADDRESS` is accepted as an alias of `MISTRAL_API_URL`. `MISTRAL_VIBE_ACTIVE_MODEL` is accepted as an alias of `MISTRAL_MODEL`. When `MISTRAL_MODEL` is set, it overrides the image default.
 
@@ -63,9 +64,9 @@ The editor entrypoint (`ml-runtime-editor`):
 
 1. Writes `~/.vibe/config.toml` and `~/.vibe/.env` from `MISTRAL_API_KEY`, `MISTRAL_API_URL`, and `MISTRAL_MODEL`.
 2. When the AWS key pair, region, and `BEDROCK_MODEL` are present, starts LiteLLM on `127.0.0.1:4000` using those long-lived keys and writes `~/.claude/settings.json` so the Claude Code extension and the CLI share that gateway. The extension login prompt is disabled.
-3. Starts code-server. Both extensions are already installed:
-   - `anthropic.claude-code`
-   - `mistralai.mistral-vibe-code`
+3. Starts code-server with Claude Code and Mistral Vibe already installed and enabled. The extensions live in `/opt/code-server`, outside the project mount at `/home/cdsw`, so they are present on every session.
+
+Fable is routed through the same gateway. Choosing Fable in Claude Code uses `BEDROCK_FABLE_MODEL`, or `BEDROCK_MODEL` when that is unset. Opus, Sonnet, and Haiku names, including the auto-mode safety check, use `BEDROCK_MODEL`.
 
 A new integrated terminal reads the same environment again. If the gateway is already running for those values, it leaves it alone. If the proxy is down, the terminal starts it. Changing a global variable applies on the next session start.
 
@@ -82,25 +83,25 @@ Chat history for Vibe is under `/home/cdsw/.vibe/logs/session/` on the project f
 
 ## Build and register
 
-The runtime catalog version starts at **1.1.1**. It is separate from the code-server release and from the Claude and Mistral extension releases. To publish the next build, bump `ML_RUNTIME_MAINTENANCE_VERSION` in the Dockerfile (`1` → `2` produces `1.1.2`) and tag the image with `ML_RUNTIME_FULL_VERSION`.
+The runtime catalog version is **1.2.1**. It is separate from the code-server release and from the Claude and Mistral extension releases. To publish the next build, bump `ML_RUNTIME_MAINTENANCE_VERSION` in the Dockerfile (`1` → `2` produces `1.2.2`) and tag the image with `ML_RUNTIME_FULL_VERSION`.
 
 ```bash
 docker build --platform linux/amd64 --pull --rm \
   -f Dockerfile \
-  -t <your-registry>/reinvent-vsc-claude-vibe:1.1.1 .
+  -t <your-registry>/reinvent-vsc-claude-vibe:1.2.1 .
 
-docker push <your-registry>/reinvent-vsc-claude-vibe:1.1.1
+docker push <your-registry>/reinvent-vsc-claude-vibe:1.2.1
 ```
 
 **Admin → Runtime Catalog → Add Runtime**, using the version-tagged image. The image sets `ML_RUNTIME_EDITOR=VsCode`.
 
 Base image: `ml-runtime-pbj-workbench-python3.13-standard:2026.08.1-b5`. Change the `FROM` line if the cluster uses a different PBJ tag.
 
-| Catalog field | 1.1.1 |
+| Catalog field | 1.2.1 |
 | --- | --- |
-| `ML_RUNTIME_SHORT_VERSION` | `1.1` |
+| `ML_RUNTIME_SHORT_VERSION` | `1.2` |
 | `ML_RUNTIME_MAINTENANCE_VERSION` | `1` |
-| `ML_RUNTIME_FULL_VERSION` | `1.1.1` |
+| `ML_RUNTIME_FULL_VERSION` | `1.2.1` |
 
 ## Architecture
 
@@ -172,6 +173,8 @@ Workbench sessions do not need a GPU. Inference runs in AWS Bedrock and on the M
 | Vibe uses the wrong model | Set `MISTRAL_MODEL` (for example `codestral`) and restart, or run `vibe` and type `/model` |
 | Extension missing from the activity bar | Reload the window. Both extensions are installed at image build; a registry image built before this Dockerfile will not have them |
 | Proxy will not start | `claude-logs` |
+| `claude-sonnet-4-6 is temporarily unavailable` blocks Bash | Rebuild this image. Auto mode calls that name through the local gateway, and the gateway serves `BEDROCK_MODEL`. The runtime no longer turns off Claude Code's attribution header, which made that check fail |
+| Claude Code or Mistral Vibe missing from the activity bar | Rebuild this image. Both extensions are enabled from `/opt/code-server/extensions` when the editor starts |
 
 ## Documentation
 

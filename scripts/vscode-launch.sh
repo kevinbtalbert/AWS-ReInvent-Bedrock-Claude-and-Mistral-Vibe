@@ -23,4 +23,15 @@ export MISTRAL_MODEL="${MISTRAL_VIBE_ACTIVE_MODEL}"
 unset AWS_BEARER_TOKEN_BEDROCK AWS_SESSION_TOKEN
 
 CODE_SERVER_BIND="${CODE_SERVER_BIND:-127.0.0.1:8090}"
-exec /usr/bin/code-server --auth=none --bind-addr="${CODE_SERVER_BIND}" --disable-telemetry "$@"
+CODE_SERVER_EXTENSIONS_DIR="${CODE_SERVER_EXTENSIONS_DIR:-/opt/code-server/extensions}"
+CODE_SERVER_USER_DATA_DIR="${CODE_SERVER_USER_DATA_DIR:-/opt/code-server/user-data}"
+
+# Project files replace /home/cdsw at session start, so extensions and editor
+# state live outside that mount. They are already installed and enabled there.
+exec /usr/bin/code-server \
+  --auth=none \
+  --bind-addr="${CODE_SERVER_BIND}" \
+  --disable-telemetry \
+  --extensions-dir="${CODE_SERVER_EXTENSIONS_DIR}" \
+  --user-data-dir="${CODE_SERVER_USER_DATA_DIR}" \
+  "$@"
