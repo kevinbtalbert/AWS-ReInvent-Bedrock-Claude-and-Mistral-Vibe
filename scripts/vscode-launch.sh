@@ -9,8 +9,9 @@ if [[ -f /usr/local/bin/configure-vibe-from-env ]]; then
     || echo "WARN: Mistral Vibe config failed; VS Code will still start." >&2
 fi
 
-if [[ -x /usr/local/bin/configure-bedrock-from-env ]]; then
-  /usr/local/bin/configure-bedrock-from-env \
+if [[ -f /usr/local/bin/configure-bedrock-from-env ]]; then
+  # shellcheck source=/dev/null
+  source /usr/local/bin/configure-bedrock-from-env \
     || echo "WARN: Claude/Bedrock startup failed; VS Code will still start." >&2
 fi
 

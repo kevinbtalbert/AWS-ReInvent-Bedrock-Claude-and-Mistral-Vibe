@@ -1,12 +1,13 @@
 # Cloudera ML runtime for AWS re:Invent
 # Browser VS Code (code-server) with both:
-#   - Claude Code (CLI + VS Code extension) → LiteLLM → Amazon Bedrock
+#   - Claude Code (CLI + VS Code extension) → Amazon Bedrock directly
 #   - Mistral Vibe (CLI + VS Code extension), default model codestral
 #
 # Do not bake credentials into the image. Set them as Cloudera AI global
-# environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+# environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
 # MISTRAL_API_URL, MISTRAL_API_KEY, and MISTRAL_MODEL.
-# Claude also needs BEDROCK_MODEL and AWS_REGION.
+# Optional picker overrides: BEDROCK_SONNET_MODEL, BEDROCK_OPUS_MODEL,
+# BEDROCK_HAIKU_MODEL, BEDROCK_FABLE_MODEL. BEDROCK_MODEL still sets Sonnet.
 FROM --platform=linux/amd64 docker.repository.cloudera.com/cloudera/cdsw/ml-runtime-pbj-workbench-python3.13-standard:2026.08.1-b5
 
 # Catalog version is 1.2.1. Bump ML_RUNTIME_MAINTENANCE_VERSION to iterate (1.2.2, ...).
@@ -40,8 +41,6 @@ COPY scripts/install-vscode-extension.sh /usr/local/bin/install-vscode-extension
 COPY scripts/mistral-vibe-shell.sh /etc/profile.d/mistral-vibe.sh
 COPY scripts/bedrock-runtime-startup.sh /etc/profile.d/zz-claude-bedrock.sh
 COPY scripts/lib/bedrock-common.sh /opt/bedrock-claude/lib/bedrock-common.sh
-COPY scripts/verify-litellm-install.sh /opt/bedrock-claude/verify-litellm-install.sh
-COPY requirements-litellm.txt /opt/bedrock-claude/requirements-litellm.txt
 
 RUN chmod +x /usr/local/bin/vscode \
       /usr/local/bin/configure-vibe-from-env \
@@ -50,8 +49,7 @@ RUN chmod +x /usr/local/bin/vscode \
       /usr/local/bin/install-mistral-vibe-cli \
       /usr/local/bin/install-vscode-extension \
       /etc/profile.d/zz-claude-bedrock.sh \
-      /opt/bedrock-claude/lib/bedrock-common.sh \
-      /opt/bedrock-claude/verify-litellm-install.sh && \
+      /opt/bedrock-claude/lib/bedrock-common.sh && \
     ln -sf /usr/local/bin/vscode /usr/local/bin/ml-runtime-editor && \
     mkdir -p /home/cdsw/.local/share/code-server/User \
              /home/cdsw/.vibe/logs/session \
@@ -84,12 +82,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 RUN npm install -g @anthropic-ai/claude-code \
     && command -v claude >/dev/null
 
-# ── LiteLLM proxy (Anthropic API → AWS Bedrock) ────────────────────────────────
-RUN python3 -m venv /opt/bedrock-claude/venv && \
-    /opt/bedrock-claude/venv/bin/pip install --no-cache-dir --upgrade pip wheel packaging && \
-    /opt/bedrock-claude/venv/bin/pip install --no-cache-dir -r /opt/bedrock-claude/requirements-litellm.txt && \
-    SKIP_LITELLM_SMOKE=1 /opt/bedrock-claude/verify-litellm-install.sh /opt/bedrock-claude/venv
-
 # ── Mistral Vibe CLI ──────────────────────────────────────────────────────────
 RUN /usr/local/bin/install-mistral-vibe-cli
 
@@ -98,12 +90,9 @@ ENV PATH="/usr/local/bin:${PATH}" \
     MISTRAL_VIBE_ACTIVE_MODEL="codestral" \
     CODE_SERVER_BIND="127.0.0.1:8090" \
     BEDROCK_HOME="/home/cdsw/.claude/bedrock" \
-    BEDROCK_VENV_BIN="/opt/bedrock-claude/venv/bin" \
-    BEDROCK_LITELLM_PORT="4000" \
+    CLAUDE_CODE_USE_BEDROCK="1" \
     CODE_SERVER_EXTENSIONS_DIR="/opt/code-server/extensions" \
-    CODE_SERVER_USER_DATA_DIR="/opt/code-server/user-data" \
-    BEDROCK_MAX_OUTPUT_TOKENS="8192" \
-    BEDROCK_MAX_INPUT_TOKENS="192000"
+    CODE_SERVER_USER_DATA_DIR="/opt/code-server/user-data"
 
 ARG ML_RUNTIME_SHORT_VERSION=1.2
 ARG ML_RUNTIME_MAINTENANCE_VERSION=1
@@ -114,7 +103,7 @@ ENV ML_RUNTIME_EDITION="re:Invent VS Code + Claude Bedrock + Mistral Vibe" \
     ML_RUNTIME_SHORT_VERSION="${ML_RUNTIME_SHORT_VERSION}" \
     ML_RUNTIME_MAINTENANCE_VERSION="${ML_RUNTIME_MAINTENANCE_VERSION}" \
     ML_RUNTIME_FULL_VERSION="${ML_RUNTIME_SHORT_VERSION}.${ML_RUNTIME_MAINTENANCE_VERSION}" \
-    ML_RUNTIME_DESCRIPTION="Browser VS Code with Claude Code on AWS Bedrock and Mistral Vibe (Codestral). Extensions preinstalled. Credentials from global environment variables."
+    ML_RUNTIME_DESCRIPTION="Browser VS Code with Claude Code on Amazon Bedrock and Mistral Vibe (Codestral). Model picker rows map to separate Bedrock models. Extensions preinstalled. Credentials from global environment variables."
 
 RUN set -eux; \
     test "${ML_RUNTIME_FULL_VERSION}" = "${ML_RUNTIME_SHORT_VERSION}.${ML_RUNTIME_MAINTENANCE_VERSION}"; \
